@@ -15,6 +15,7 @@ from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped
 import open3d
 import numpy as np
+from pyquaternion import Quaternion
 
 # create a simple "Zig" pattern where we cut only in one direction.
 # the first line is at ymin
@@ -313,7 +314,7 @@ if __name__ == "__main__":
     normals_length = np.sum(normals**2, axis=1)
     flag = np.equal(np.ones(normals_length.shape, dtype=float), normals_length).all()
     print('all equal 1:', flag)
-    open3d.geometry.PointCloud.orient_normals_to_align_with_direction(pcd, orientation_reference=np.array([0.0, 0.0, 1.0]))  #设定法向量在z轴方向上，全部z轴正方向一致
+    open3d.geometry.PointCloud.orient_normals_to_align_with_direction(pcd, orientation_reference=np.array([0.0, 0.0, -1.0]))  #设定法向量在z轴方向上，全部z轴正方向一致
 
     # 法向量可视化
     open3d.visualization.draw_geometries([pcd],
@@ -328,9 +329,31 @@ if __name__ == "__main__":
         ps.pose.position.z=temp[count][2]
         for i in range(len(normals)):
             if np.sum((points[i]-temp[count])**2)==min(sum(np.transpose((points-temp[count])**2))):
-                 ps.pose.orientation.x=normals[i][0]
-                 ps.pose.orientation.y=normals[i][1]
-                 ps.pose.orientation.z=normals[i][2]
+                rotate_matrix=[[0,0,0],[0,0,0],[0,0,0]]
+                # 构建点
+                Z = np.array([normals[i][0], normals[i][1], normals[i][2]])
+                X = np.array([Z[1], -Z[0], 0])
+                Z = Z/np.linalg.norm(Z)
+                X = X/np.linalg.norm(X)
+                rotate_matrix[0][2]=Z[0]    #normals[i][0]/math.sqrt(sum(normals[i]**2))
+                rotate_matrix[1][2]=Z[1]    #normals[i][1]/math.sqrt(sum(normals[i]**2))
+                rotate_matrix[2][2]=Z[2]    #normals[i][2]/math.sqrt(sum(normals[i]**2))
+                rotate_matrix[0][0]=X[0]
+                rotate_matrix[1][0]=X[1]
+                rotate_matrix[2][0]=X[2]
+                # 计算叉乘
+                Y = np.cross(Z,X)
+                Y = Y/np.linalg.norm(Y)
+                rotate_matrix[0][1]=Y[0]
+                rotate_matrix[1][1]=Y[1]
+                rotate_matrix[2][1]=Y[2]
+                rotateMatrix = np.array(rotate_matrix)
+                print(rotateMatrix)
+                q = Quaternion(matrix=rotateMatrix)
+                ps.pose.orientation.x=q.x
+                ps.pose.orientation.y=q.y
+                ps.pose.orientation.z=q.z
+                ps.pose.orientation.w=q.w
         # 发布话题
         pub.publish(ps)
         rospy.loginfo("%s",str(ps))
